@@ -11,18 +11,30 @@ export default function App() {
   const [placingWall, setPlacingWall] = useState<'H' | 'V' | null>(null);
   const [boardSize, setBoardSize] = useState<number | null>(null);
   const [connected, setConnected] = useState(false);
+  const socketRef = useRef<any>(null);
+  const [claimedSlots, setClaimedSlots] = useState<string[]>([]);
+  const [localPlayerId, setLocalPlayerId] = useState<string | null>(null);
   const [isLocalGame, setIsLocalGame] = useState(false);
   const [botEnabled, setBotEnabled] = useState(false);
   const botTimer = useRef<number | null>(null);
   const [winner, setWinner] = useState<string | null>(null);
 
   useEffect(() => {
-    const socket: any = io(SERVER, { autoConnect: true });
+    socketRef.current = io(SERVER, { autoConnect: true });
+    const socket = socketRef.current;
     socket.on('connect', () => setConnected(true));
-    socket.on('disconnect', () => setConnected(false));
+    socket.on('disconnect', () => { setConnected(false); setClaimedSlots([]); setLocalPlayerId(null); });
     socket.on('game_update', (payload: any) => {
       if (!payload || !payload.id) return;
       if (payload.id === gameId) setGame(payload.game);
+    });
+    socket.on('slot_update', (payload: any) => {
+      if (!payload || !payload.id) return;
+      if (payload.id === gameId) setClaimedSlots(payload.slots || []);
+    });
+    socket.on('joined', (payload: any) => {
+      // optional ack
+      if (payload && payload.id === gameId && payload.playerId) setLocalPlayerId(payload.playerId);
     });
     return () => { socket.disconnect(); };
   }, [gameId]);
@@ -86,6 +98,7 @@ export default function App() {
     const g = body.game as GameState;
     setGame(g);
     if (body.id) setGameId(body.id);
+    if (body.id && body.slots) setClaimedSlots(body.slots);
   }
 
   function createLocalGame(players = 2) {
@@ -136,6 +149,7 @@ export default function App() {
     const body = await res.json();
     setGame(body.game as GameState);
     setGameId(id);
+    if (body.slots) setClaimedSlots(body.slots);
   }
 
   async function doMove(r: number, c: number) {
@@ -154,10 +168,11 @@ export default function App() {
       return;
     }
     if (!gameId) return alert('No game selected');
+    if (!localPlayerId) return alert('You must join a player slot before playing on the server');
     const res = await fetch(`${SERVER}/games/${gameId}/move`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ playerId: player.id, to: { r, c } }),
+      body: JSON.stringify({ playerId: localPlayerId, to: { r, c } }),
     });
     if (!res.ok) {
       const err = await res.json();
@@ -180,9 +195,9 @@ export default function App() {
       return;
     }
     if (!gameId) return alert('No game selected');
-    const player = game.players[game.turnIndex];
+    if (!localPlayerId) return alert('You must join a player slot before playing on the server');
     const res = await fetch(`${SERVER}/games/${gameId}/place_wall`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ wall, playerId: player.id }),
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ wall, playerId: localPlayerId }),
     });
     if (!res.ok) {
       const err = await res.json();
@@ -228,6 +243,8 @@ export default function App() {
           <button onClick={() => setPlacingWall('H')}>Place H</button>
           <button onClick={() => setPlacingWall('V')}>Place V</button>
           <button onClick={() => createLocalGame(2)}>Create Local Game</button>
+          <button onClick={() => createLocalGame(3)}>Create Local Game (3P)</button>
+          <button onClick={() => createLocalGame(4)}>Create Local Game (4P)</button>
           <button onClick={() => { createLocalGame(2); setBotEnabled(true); setIsLocalGame(true); }}>Play vs Bot</button>
         </div>
         <div style={{ minWidth: 220 }}>
@@ -236,9 +253,17 @@ export default function App() {
       </div>
 
       <div className="board-wrap">
-        <div className="board" style={{ width: `calc(${tileSize} * ${N})`, height: `calc(${tileSize} * ${N})`, maxWidth: boardMax, maxHeight: boardMax }}>
+        <div className="board" style={{ 
+          width: 'var(--board-size)',
+          height: 'var(--board-size)',
+          maxWidth: boardMax, maxHeight: boardMax,
+          ['--board-size' as any]: 'min(640px, 90vw)',
+          // compute tile so N * tile + (N-1)*gap + 2*pad = board-size
+          ['--tile' as any]: `calc((var(--board-size) - (${N - 1} * var(--gap, 6px)) - (var(--pad, 6px) * 2)) / ${N})`,
+          ['--wall-thickness' as any]: '12px', ['--wall-offset' as any]: '8px', ['--gap' as any]: '6px', ['--pad' as any]: '6px'
+        }}>
           {/* grid */}
-          <div className="grid" style={{ gridTemplateColumns: `repeat(${N}, ${tileSize})`, gridTemplateRows: `repeat(${N}, ${tileSize})` }}>
+          <div className="grid" style={{ gridTemplateColumns: `repeat(${N}, var(--tile))`, gridTemplateRows: `repeat(${N}, var(--tile))` }}>
             {Array.from({ length: N }).map((_, r) =>
               Array.from({ length: N }).map((__, c) => {
                 const pawn = game?.players.find((p: any) => p.pos.r === r && p.pos.c === c);
@@ -263,38 +288,38 @@ export default function App() {
           {/* render clickable horizontal anchors when in H-placement mode */}
           {placingWall === 'H' && anchors.H.map((a) => {
             const valid = canPlaceWallLocal('H', a.r, a.c);
-            const containerStyle: any = { position: 'absolute', top: `calc(${tileSize} * ${a.r + 1} - 8px)`, left: `calc(${tileSize} * ${a.c} + 6px)`, width: `calc(${tileSize} * 2 - 12px)`, height: 14 };
+            const containerStyle: any = { position: 'absolute', top: `calc(var(--tile) * ${a.r + 1} - var(--wall-offset))`, left: `calc(var(--tile) * ${a.c} + calc(var(--wall-offset) / 1))`, width: `calc(var(--tile) * 2 - calc(var(--wall-offset) * 2))`, height: 'var(--wall-thickness)' };
             const visibleStyle: any = { width: '100%', height: '100%' };
             return (
               <div key={`anchor-h-${a.r}-${a.c}`} style={containerStyle}>
                 <div className={`anchor anchor-h ${valid ? 'valid' : 'invalid'}`} style={visibleStyle} />
-                <div className="anchor-hit" role="button" aria-label={`Place horizontal wall at ${a.r},${a.c}`} onClick={() => { if (valid) doPlaceWall(a.r, a.c, 'H'); }} style={{ position: 'absolute', top: '-8px', left: '-8px', right: '-8px', bottom: '-8px' }} />
+                <div className="anchor-hit" role="button" aria-label={`Place horizontal wall at ${a.r},${a.c}`} onClick={() => { if (valid) doPlaceWall(a.r, a.c, 'H'); }} style={{ position: 'absolute', top: `calc(-1 * var(--wall-offset))`, left: `calc(-1 * var(--wall-offset))`, right: `calc(-1 * var(--wall-offset))`, bottom: `calc(-1 * var(--wall-offset))` }} />
               </div>
             );
           })}
 
           {/* render placed horizontal walls */}
           {game?.walls.filter((w: any) => w.orientation === 'H').map((w: any) => (
-            <div key={`wall-h-${w.r}-${w.c}`} style={{ position: 'absolute', top: `calc(${tileSize} * ${w.r + 1} - 8px)`, left: `calc(${tileSize} * ${w.c} + 6px)`, width: `calc(${tileSize} * 2 - 12px)`, height: 14, background: '#333', borderRadius: 4 }} />
+            <div key={`wall-h-${w.r}-${w.c}`} style={{ position: 'absolute', top: `calc(var(--tile) * ${w.r + 1} - var(--wall-offset))`, left: `calc(var(--tile) * ${w.c} + calc(var(--wall-offset) / 1))`, width: `calc(var(--tile) * 2 - calc(var(--wall-offset) * 2))`, height: 'var(--wall-thickness)', background: '#333', borderRadius: 6 }} />
           ))}
 
           {/* render vertical wall anchors */}
           {/* render clickable vertical anchors when in V-placement mode */}
           {placingWall === 'V' && anchors.V.map((a) => {
             const valid = canPlaceWallLocal('V', a.r, a.c);
-            const containerStyle: any = { position: 'absolute', top: `calc(${tileSize} * ${a.r} + 6px)`, left: `calc(${tileSize} * ${a.c + 1} - 8px)`, width: 14, height: `calc(${tileSize} * 2 - 12px)` };
+            const containerStyle: any = { position: 'absolute', top: `calc(var(--tile) * ${a.r} + calc(var(--wall-offset) / 1))`, left: `calc(var(--tile) * ${a.c + 1} - var(--wall-offset))`, width: 'var(--wall-thickness)', height: `calc(var(--tile) * 2 - calc(var(--wall-offset) * 2))` };
             const visibleStyle: any = { width: '100%', height: '100%' };
             return (
               <div key={`anchor-v-${a.r}-${a.c}`} style={containerStyle}>
                 <div className={`anchor anchor-v ${valid ? 'valid' : 'invalid'}`} style={visibleStyle} />
-                <div className="anchor-hit" role="button" aria-label={`Place vertical wall at ${a.r},${a.c}`} onClick={() => { if (valid) doPlaceWall(a.r, a.c, 'V'); }} style={{ position: 'absolute', top: '-8px', left: '-8px', right: '-8px', bottom: '-8px' }} />
+                <div className="anchor-hit" role="button" aria-label={`Place vertical wall at ${a.r},${a.c}`} onClick={() => { if (valid) doPlaceWall(a.r, a.c, 'V'); }} style={{ position: 'absolute', top: `calc(-1 * var(--wall-offset))`, left: `calc(-1 * var(--wall-offset))`, right: `calc(-1 * var(--wall-offset))`, bottom: `calc(-1 * var(--wall-offset))` }} />
               </div>
             );
           })}
 
           {/* render placed vertical walls */}
           {game?.walls.filter((w: any) => w.orientation === 'V').map((w: any) => (
-            <div key={`wall-v-${w.r}-${w.c}`} style={{ position: 'absolute', top: `calc(${tileSize} * ${w.r} + 6px)`, left: `calc(${tileSize} * ${w.c + 1} - 8px)`, width: 14, height: `calc(${tileSize} * 2 - 12px)`, background: '#333', borderRadius: 4 }} />
+            <div key={`wall-v-${w.r}-${w.c}`} style={{ position: 'absolute', top: `calc(var(--tile) * ${w.r} + calc(var(--wall-offset) / 1))`, left: `calc(var(--tile) * ${w.c + 1} - var(--wall-offset))`, width: 'var(--wall-thickness)', height: `calc(var(--tile) * 2 - calc(var(--wall-offset) * 2))`, background: '#333', borderRadius: 6 }} />
           ))}
         </div>
 
@@ -309,6 +334,37 @@ export default function App() {
                 <div className="item" key={`legend-${p.id}`}>
                   <div className="swatch" style={{ background: p.id === 'p1' ? '#ff8a65' : p.id === 'p2' ? '#64b5f6' : p.id === 'p3' ? '#81c784' : '#ba68c8' }} />
                   <div style={{ fontSize: 13 }}>{p.id} — walls: {p.wallsRemaining ?? '-'} — pos: {p.pos.r},{p.pos.c}</div>
+                  {gameId ? (
+                    <div style={{ marginLeft: 8 }}>
+                      {claimedSlots.includes(p.id) ? (
+                        <small style={{ color: '#666' }}>joined</small>
+                      ) : (
+                        <button onClick={async () => {
+                          // optimistic local claim so UI shows Join immediately
+                          setClaimedSlots((s) => Array.from(new Set([...(s || []), p.id])));
+                          setLocalPlayerId(p.id);
+                          // emit socket event if connected
+                          try {
+                            if (socketRef.current && socketRef.current.connected) {
+                              socketRef.current.emit('join_slot', { gameId, slot: p.id });
+                            }
+                          } catch (e) {
+                            // ignore
+                          }
+                          // best-effort POST in case server provides a REST join endpoint
+                          try {
+                            const res = await fetch(`${SERVER}/games/${gameId}/join`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ slot: p.id }) });
+                            if (res.ok) {
+                              const body = await res.json();
+                              if (body.slots) setClaimedSlots(body.slots);
+                            }
+                          } catch (e) {
+                            // network error, ignore; optimistic UI already updated
+                          }
+                        }}>Join</button>
+                      )}
+                    </div>
+                  ) : null}
                 </div>
               ))}
             </div>
