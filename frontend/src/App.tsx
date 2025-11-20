@@ -8,7 +8,8 @@ const SERVER = ((import.meta as any).env && (import.meta as any).env.VITE_API_UR
 export default function App() {
   const [game, setGame] = useState<GameState | null>(null);
   const [gameId, setGameId] = useState<string | null>(null);
-  const [placingWall, setPlacingWall] = useState<'H' | 'V' | null>(null);
+  const [placingWall, setPlacingWall] = useState<'H' | 'V' | 'B' | null>(null);
+  const [showValidAnchors, setShowValidAnchors] = useState(true);
   const [boardSize, setBoardSize] = useState<number | null>(null);
   const [connected, setConnected] = useState(false);
   const socketRef = useRef<any>(null);
@@ -187,6 +188,8 @@ export default function App() {
       try {
         const next = core.applyPlaceWall(game, wall);
         setGame(next);
+        // return to move mode after placing
+        setPlacingWall(null);
         const w = core.checkWinner(next);
         if (w) setWinner(w);
       } catch (e: any) {
@@ -202,6 +205,10 @@ export default function App() {
     if (!res.ok) {
       const err = await res.json();
       alert(err.error || 'illegal wall');
+    }
+    else {
+      // on success, switch back to move mode
+      setPlacingWall(null);
     }
   }
 
@@ -225,7 +232,7 @@ export default function App() {
 
   return (
     <div className="app-root">
-      <h1 className="app-title">Quoridor — Networked (MVP)</h1>
+      <h1 className="app-title">Quoridor</h1>
 
       <div className="hud">
         <div><strong>Server:</strong> {SERVER}</div>
@@ -239,9 +246,11 @@ export default function App() {
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <button onClick={() => createGame()}>Create Game (server)</button>
           <input placeholder="Game ID (join)" onKeyDown={(e) => { if (e.key === 'Enter') joinGame((e.target as HTMLInputElement).value); }} />
-          <button onClick={() => setPlacingWall(null)}>Move</button>
-          <button onClick={() => setPlacingWall('H')}>Place H</button>
-          <button onClick={() => setPlacingWall('V')}>Place V</button>
+          {/* anchors are always visible — walls can be placed at any time */}
+          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <input type="checkbox" checked={showValidAnchors} onChange={(e) => setShowValidAnchors(e.target.checked)} />
+            <span style={{ fontSize: 13 }}>Show valid wall moves</span>
+          </label>
           <button onClick={() => createLocalGame(2)}>Create Local Game</button>
           <button onClick={() => createLocalGame(3)}>Create Local Game (3P)</button>
           <button onClick={() => createLocalGame(4)}>Create Local Game (4P)</button>
@@ -253,7 +262,7 @@ export default function App() {
       </div>
 
       <div className="board-wrap">
-        <div className="board" style={{ 
+        <div className={`board ${showValidAnchors ? '' : 'hide-non-hover'}`} style={{ 
           width: 'var(--board-size)',
           height: 'var(--board-size)',
           maxWidth: boardMax, maxHeight: boardMax,
@@ -286,7 +295,7 @@ export default function App() {
 
           {/* render horizontal wall anchors and existing walls */}
           {/* render clickable horizontal anchors when in H-placement mode */}
-          {placingWall === 'H' && anchors.H.map((a) => {
+          {anchors.H.map((a) => {
             const valid = canPlaceWallLocal('H', a.r, a.c);
             // place horizontal anchor centered in the gap between row r and r+1
             const containerStyle: any = { 
@@ -314,7 +323,7 @@ export default function App() {
 
           {/* render vertical wall anchors */}
           {/* render clickable vertical anchors when in V-placement mode */}
-          {placingWall === 'V' && anchors.V.map((a) => {
+          {anchors.V.map((a) => {
             const valid = canPlaceWallLocal('V', a.r, a.c);
             // place vertical anchor centered in the gap between col c and c+1
             const containerStyle: any = { 

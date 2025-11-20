@@ -22,12 +22,22 @@
 .pawn.p4 { background: linear-gradient(180deg,#ba68c8,#9c4fb8); }
 .wall-h { position:absolute; height:14px; background:#333; border-radius:4px; }
 .wall-v { position:absolute; width:14px; background:#333; border-radius:4px; }
-.anchor { opacity: 0.95; cursor: pointer; transition: transform 0.12s ease, box-shadow 0.12s ease; border-radius:6px; position: relative; z-index: 20; }
-.anchor:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(16,24,40,0.12); }
+
+.wall-h { transform: translateY(var(--anchor-h-offset, 5px)); transform-origin: center; }
+.wall-v { transform: translateX(var(--anchor-v-offset, 5px)); transform-origin: center; }
+.anchor { --anchor-h-offset: 5px; --anchor-v-offset: 5px; opacity: 0.95; cursor: pointer; transition: transform 0.12s ease, box-shadow 0.12s ease; border-radius:6px; position: relative; z-index: 20; }
+.anchor:hover { transform: translateY(calc(-2px)); box-shadow: 0 8px 24px rgba(16,24,40,0.12); }
 .anchor.valid { background: linear-gradient(180deg, rgba(76,175,80,0.98), rgba(56,150,55,0.95)); box-shadow: 0 6px 16px rgba(76,175,80,0.18); }
 .anchor.invalid { display: none; }
 .anchor-hit { position: absolute; background: transparent; border-radius: 8px; z-index: 30; pointer-events: auto; }
 .anchor-hit:hover { background: rgba(0,0,0,0.04); }
+
+/* ensure the hit area follows the same visual offset as the visible anchor
+  so clicking the visible element actually triggers the hit area */
+.anchor-hit.anchor-h { transform: translateY(var(--anchor-h-offset)); }
+.anchor-hit.anchor-v { transform: translateX(var(--anchor-v-offset)); }
+/* put the hit element above walls and anchors when hovered so it receives clicks */
+.anchor-container .anchor-hit { z-index: 1202; }
 
 /* when an anchor's container is hovered or focused, change the visible anchor color to dark gray */
 /* when an anchor's container is hovered or focused, lift the container and anchor
@@ -41,9 +51,13 @@
   z-index: 1201; /* ensure the anchor itself sits above the container stacking level */
 }
 
+/* when board has .hide-non-hover, hide all valid anchors except the hovered/focused one */
+.board.hide-non-hover .anchor.valid { opacity: 0; pointer-events: none; }
+.board.hide-non-hover .anchor-container:hover .anchor.valid, .board.hide-non-hover .anchor-container:focus-within .anchor.valid { opacity: 1; pointer-events: auto; }
+
 /* show visual anchors slightly shorter to create a visible gap between adjacent anchors */
-.anchor-h { margin-left: calc(var(--anchor-gap-x) / 2); margin-right: calc(var(--anchor-gap-x) / 2); width: calc(100% - var(--anchor-gap-x)); height: 100%; }
-.anchor-v { margin-top: calc(var(--anchor-gap-y) / 2); margin-bottom: calc(var(--anchor-gap-y) / 2); height: calc(100% - var(--anchor-gap-y)); width: 100%; }
+.anchor-h { margin-left: calc(var(--anchor-gap-x) / 2); margin-right: calc(var(--anchor-gap-x) / 2); width: calc(100% - var(--anchor-gap-x)); height: 100%; transform: translateY(var(--anchor-h-offset)); }
+.anchor-v { margin-top: calc(var(--anchor-gap-y) / 2); margin-bottom: calc(var(--anchor-gap-y) / 2); height: calc(100% - var(--anchor-gap-y)); width: 100%; transform: translateX(var(--anchor-v-offset)); }
 
 /* match the clickable hit area to the visible anchor so clicks only land where the anchor appears */
 .anchor-container .anchor-hit.anchor-h { left: calc(var(--anchor-gap-x) / 2); right: calc(var(--anchor-gap-x) / 2); top: 0; bottom: 0; }
