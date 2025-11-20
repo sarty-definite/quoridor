@@ -260,7 +260,7 @@ export default function App() {
           ['--board-size' as any]: 'min(640px, 90vw)',
           // compute tile so N * tile + (N-1)*gap + 2*pad = board-size
           ['--tile' as any]: `calc((var(--board-size) - (${N - 1} * var(--gap, 6px)) - (var(--pad, 6px) * 2)) / ${N})`,
-          ['--wall-thickness' as any]: '12px', ['--wall-offset' as any]: '8px', ['--gap' as any]: '6px', ['--pad' as any]: '6px'
+          ['--wall-thickness' as any]: '8px', ['--wall-offset' as any]: '8px', ['--gap' as any]: '6px', ['--pad' as any]: '6px', ['--anchor-gap' as any]: '12px', ['--anchor-gap-x' as any]: '12px', ['--anchor-gap-y' as any]: '12px', ['--step' as any]: 'calc(var(--tile) + var(--gap))'
         }}>
           {/* grid */}
           <div className="grid" style={{ gridTemplateColumns: `repeat(${N}, var(--tile))`, gridTemplateRows: `repeat(${N}, var(--tile))` }}>
@@ -288,38 +288,56 @@ export default function App() {
           {/* render clickable horizontal anchors when in H-placement mode */}
           {placingWall === 'H' && anchors.H.map((a) => {
             const valid = canPlaceWallLocal('H', a.r, a.c);
-            const containerStyle: any = { position: 'absolute', top: `calc(var(--tile) * ${a.r + 1} - var(--wall-offset))`, left: `calc(var(--tile) * ${a.c} + calc(var(--wall-offset) / 1))`, width: `calc(var(--tile) * 2 - calc(var(--wall-offset) * 2))`, height: 'var(--wall-thickness)' };
+            // place horizontal anchor centered in the gap between row r and r+1
+            const containerStyle: any = { 
+              position: 'absolute',
+              top: `calc(var(--step) * ${a.r} + var(--tile) + calc(var(--gap) / 2) - calc(var(--wall-thickness) / 2))`,
+              left: `calc(var(--step) * ${a.c})`,
+              width: `calc(var(--tile) * 2 + var(--gap))`,
+              height: 'var(--wall-thickness)'
+            };
             const visibleStyle: any = { width: '100%', height: '100%' };
+            if (!valid) return null; // hide invalid anchors
             return (
-              <div key={`anchor-h-${a.r}-${a.c}`} style={containerStyle}>
-                <div className={`anchor anchor-h ${valid ? 'valid' : 'invalid'}`} style={visibleStyle} />
-                <div className="anchor-hit" role="button" aria-label={`Place horizontal wall at ${a.r},${a.c}`} onClick={() => { if (valid) doPlaceWall(a.r, a.c, 'H'); }} style={{ position: 'absolute', top: `calc(-1 * var(--wall-offset))`, left: `calc(-1 * var(--wall-offset))`, right: `calc(-1 * var(--wall-offset))`, bottom: `calc(-1 * var(--wall-offset))` }} />
+              <div key={`anchor-h-${a.r}-${a.c}`} className="anchor-container" style={containerStyle}>
+                <div className={`anchor anchor-h valid`} style={visibleStyle} />
+                <div className={`anchor-hit anchor-h`} role="button" aria-label={`Place horizontal wall at ${a.r},${a.c}`} onClick={() => { if (valid) doPlaceWall(a.r, a.c, 'H'); }} style={{ position: 'absolute' }} />
               </div>
             );
           })}
 
           {/* render placed horizontal walls */}
           {game?.walls.filter((w: any) => w.orientation === 'H').map((w: any) => (
-            <div key={`wall-h-${w.r}-${w.c}`} style={{ position: 'absolute', top: `calc(var(--tile) * ${w.r + 1} - var(--wall-offset))`, left: `calc(var(--tile) * ${w.c} + calc(var(--wall-offset) / 1))`, width: `calc(var(--tile) * 2 - calc(var(--wall-offset) * 2))`, height: 'var(--wall-thickness)', background: '#333', borderRadius: 6 }} />
+            // placed horizontal wall centered in the gap
+            <div key={`wall-h-${w.r}-${w.c}`} className="wall-h" style={{ position: 'absolute', top: `calc(var(--step) * ${w.r} + var(--tile) + calc(var(--gap) / 2) - calc(var(--wall-thickness) / 2))`, left: `calc(var(--step) * ${w.c})`, width: `calc(var(--tile) * 2 + var(--gap))`, height: 'var(--wall-thickness)', background: '#333', borderRadius: 6 }} />
           ))}
 
           {/* render vertical wall anchors */}
           {/* render clickable vertical anchors when in V-placement mode */}
           {placingWall === 'V' && anchors.V.map((a) => {
             const valid = canPlaceWallLocal('V', a.r, a.c);
-            const containerStyle: any = { position: 'absolute', top: `calc(var(--tile) * ${a.r} + calc(var(--wall-offset) / 1))`, left: `calc(var(--tile) * ${a.c + 1} - var(--wall-offset))`, width: 'var(--wall-thickness)', height: `calc(var(--tile) * 2 - calc(var(--wall-offset) * 2))` };
+            // place vertical anchor centered in the gap between col c and c+1
+            const containerStyle: any = { 
+              position: 'absolute',
+              top: `calc(var(--step) * ${a.r})`,
+              left: `calc(var(--step) * ${a.c} + var(--tile) + calc(var(--gap) / 2) - calc(var(--wall-thickness) / 2))`,
+              width: 'var(--wall-thickness)',
+              height: `calc(var(--tile) * 2 + var(--gap))`
+            };
             const visibleStyle: any = { width: '100%', height: '100%' };
+            if (!valid) return null; // hide invalid anchors
             return (
-              <div key={`anchor-v-${a.r}-${a.c}`} style={containerStyle}>
-                <div className={`anchor anchor-v ${valid ? 'valid' : 'invalid'}`} style={visibleStyle} />
-                <div className="anchor-hit" role="button" aria-label={`Place vertical wall at ${a.r},${a.c}`} onClick={() => { if (valid) doPlaceWall(a.r, a.c, 'V'); }} style={{ position: 'absolute', top: `calc(-1 * var(--wall-offset))`, left: `calc(-1 * var(--wall-offset))`, right: `calc(-1 * var(--wall-offset))`, bottom: `calc(-1 * var(--wall-offset))` }} />
+              <div key={`anchor-v-${a.r}-${a.c}`} className="anchor-container" style={containerStyle}>
+                <div className={`anchor anchor-v valid`} style={visibleStyle} />
+                <div className={`anchor-hit anchor-v`} role="button" aria-label={`Place vertical wall at ${a.r},${a.c}`} onClick={() => { if (valid) doPlaceWall(a.r, a.c, 'V'); }} style={{ position: 'absolute' }} />
               </div>
             );
           })}
 
           {/* render placed vertical walls */}
           {game?.walls.filter((w: any) => w.orientation === 'V').map((w: any) => (
-            <div key={`wall-v-${w.r}-${w.c}`} style={{ position: 'absolute', top: `calc(var(--tile) * ${w.r} + calc(var(--wall-offset) / 1))`, left: `calc(var(--tile) * ${w.c + 1} - var(--wall-offset))`, width: 'var(--wall-thickness)', height: `calc(var(--tile) * 2 - calc(var(--wall-offset) * 2))`, background: '#333', borderRadius: 6 }} />
+            // placed vertical wall centered in the gap
+            <div key={`wall-v-${w.r}-${w.c}`} className="wall-v" style={{ position: 'absolute', top: `calc(var(--step) * ${w.r})`, left: `calc(var(--step) * ${w.c} + var(--tile) + calc(var(--gap) / 2) - calc(var(--wall-thickness) / 2))`, width: 'var(--wall-thickness)', height: `calc(var(--tile) * 2 + var(--gap))`, background: '#333', borderRadius: 6 }} />
           ))}
         </div>
 

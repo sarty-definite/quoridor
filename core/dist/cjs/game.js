@@ -10,7 +10,7 @@ const board_1 = require("./board");
 function canPlaceWall(state, wall) {
     // simple overlap / bounds checks
     const N = state.boardSize;
-    if (wall.orientation === 'H') {
+    if (wall.orientation === "H") {
         if (wall.r < 0 || wall.r >= N - 1 || wall.c < 0 || wall.c >= N - 1)
             return false;
     }
@@ -20,26 +20,28 @@ function canPlaceWall(state, wall) {
     }
     // overlapping and crossing checks
     for (const w of state.walls) {
-        // same anchor + orientation
+        // same anchor + orientation is obviously illegal
         if (w.r === wall.r && w.c === wall.c && w.orientation === wall.orientation)
             return false;
-        // crossing check: H crossing V at overlapping segment (anchors may differ)
-        // e.g. existing H at (r,c) blocks V at (r-1,c) and V at (r, c)
-        if (w.orientation !== wall.orientation) {
-            // compute the set of edge coordinates blocked by existing and candidate walls and check if they intersect
-            const existingEdges = (0, board_1.getBlockedEdgesFromWalls)([w]);
-            const candidateEdges = (0, board_1.getBlockedEdgesFromWalls)([wall]);
-            for (const e of existingEdges)
-                if (candidateEdges.has(e))
-                    return false;
-        }
+        // if orientations differ and they share the same anchor, they cross (forbidden)
+        if (w.orientation !== wall.orientation && w.r === wall.r && w.c === wall.c)
+            return false;
+        // compute blocked edges for existing and candidate walls; if any blocked edge intersects,
+        // the candidate overlaps an existing wall (shares an edge) and is illegal
+        const existingEdges = (0, board_1.getBlockedEdgesFromWalls)([w]);
+        const candidateEdges = (0, board_1.getBlockedEdgesFromWalls)([wall]);
+        for (const e of existingEdges)
+            if (candidateEdges.has(e))
+                return false;
     }
     // tentatively add and check path existence for all players
     const walls = [...state.walls, wall];
     for (const p of state.players) {
         const goalCheck = (pos) => {
             if (p.goal)
-                return p.goal.axis === 'r' ? pos.r === p.goal.value : pos.c === p.goal.value;
+                return p.goal.axis === "r"
+                    ? pos.r === p.goal.value
+                    : pos.c === p.goal.value;
             // if startPos exists, derive goal from it
             if (p.startPos) {
                 if (p.startPos.r === 0)
@@ -71,8 +73,12 @@ function canPlaceWall(state, wall) {
 function applyMove(state, playerId, to) {
     const legal = getLegalMoves(state, playerId);
     if (!legal.find((m) => m.r === to.r && m.c === to.c))
-        throw new Error('illegal move');
-    const next = { ...state, players: state.players.map((p) => ({ ...p })), walls: [...state.walls] };
+        throw new Error("illegal move");
+    const next = {
+        ...state,
+        players: state.players.map((p) => ({ ...p })),
+        walls: [...state.walls],
+    };
     const idx = next.players.findIndex((p) => p.id === playerId);
     next.players[idx].pos = to;
     next.turnIndex = (next.turnIndex + 1) % next.players.length;
@@ -81,12 +87,16 @@ function applyMove(state, playerId, to) {
 // apply a wall placement; decrements wallsRemaining and validates
 function applyPlaceWall(state, wall) {
     if (!canPlaceWall(state, wall))
-        throw new Error('illegal wall');
-    const next = { ...state, players: state.players.map((p) => ({ ...p })), walls: [...state.walls] };
+        throw new Error("illegal wall");
+    const next = {
+        ...state,
+        players: state.players.map((p) => ({ ...p })),
+        walls: [...state.walls],
+    };
     const idx = next.turnIndex;
-    if (typeof next.players[idx].wallsRemaining === 'number') {
+    if (typeof next.players[idx].wallsRemaining === "number") {
         if (next.players[idx].wallsRemaining <= 0)
-            throw new Error('no walls remaining');
+            throw new Error("no walls remaining");
         next.players[idx].wallsRemaining -= 1;
     }
     next.walls.push(wall);
@@ -99,9 +109,9 @@ function checkWinner(state) {
     for (const p of state.players) {
         // if explicit goal present, use it
         if (p.goal) {
-            if (p.goal.axis === 'r' && p.pos.r === p.goal.value)
+            if (p.goal.axis === "r" && p.pos.r === p.goal.value)
                 return p.id;
-            if (p.goal.axis === 'c' && p.pos.c === p.goal.value)
+            if (p.goal.axis === "c" && p.pos.c === p.goal.value)
                 return p.id;
             continue;
         }
@@ -168,14 +178,24 @@ function getLegalMoves(state, playerId) {
         }
         // occupied by someone -> attempt jump
         const beyond = { r: n.r + d.r, c: n.c + d.c };
-        if ((0, board_1.inBounds)(state.boardSize, beyond) && !blocked.has((0, board_1.edgeKey)(n, beyond)) && !occupied.has(`${beyond.r},${beyond.c}`)) {
+        if ((0, board_1.inBounds)(state.boardSize, beyond) &&
+            !blocked.has((0, board_1.edgeKey)(n, beyond)) &&
+            !occupied.has(`${beyond.r},${beyond.c}`)) {
             // straight jump is possible
             moves.push(beyond);
             continue;
         }
         // straight jump blocked -> consider diagonal hops around the blocking pawn
         // compute lateral directions depending on movement axis (for horizontal move, laterals are vertical offsets)
-        const laterals = d.r === 0 ? [{ r: -1, c: 0 }, { r: 1, c: 0 }] : [{ r: 0, c: -1 }, { r: 0, c: 1 }];
+        const laterals = d.r === 0
+            ? [
+                { r: -1, c: 0 },
+                { r: 1, c: 0 },
+            ]
+            : [
+                { r: 0, c: -1 },
+                { r: 0, c: 1 },
+            ];
         for (const lat of laterals) {
             const diag = { r: n.r + lat.r, c: n.c + lat.c };
             if (!(0, board_1.inBounds)(state.boardSize, diag))
