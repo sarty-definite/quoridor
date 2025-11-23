@@ -1,0 +1,14 @@
+{
+  "name": "quoridor-monorepo",
+  "private": true,
+  "version": "0.1.0",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build:core": "cd core && npm ci && npm run build",
+    "build:backend": "cd backend && npm ci && npm run build",
+    "build": "npm run build:core && npm run build:backend",
+    "start": "cd backend && npm start"
+  }
+}
