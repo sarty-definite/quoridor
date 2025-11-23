@@ -1,4 +1,4 @@
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'crypto';
 import { GameState, Player, DEFAULTS } from 'quoridor-core';
 
 const games = new Map<string, GameState>();
@@ -25,7 +25,7 @@ export function createGame(playersCount = 2): { id: string; game: GameState } {
   }
   const game: GameState = { boardSize: N, players, walls: [], turnIndex: 0 } as any;
   ensurePlayerGoals(game);
-  const id = uuidv4();
+  const id = randomUUID();
   games.set(id, game);
   return { id, game };
 }
