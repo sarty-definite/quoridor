@@ -7,9 +7,11 @@ import * as store from './gameStore';
 import * as core from 'quoridor-core';
 
 const app = express();
+// Use FRONTEND_ORIGIN to restrict CORS in production (falls back to '*' for dev)
+const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || '*';
 // Simple CORS middleware for API endpoints (allows frontend dev server to call REST)
 app.use((req, res, next) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Origin', FRONTEND_ORIGIN);
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') {
@@ -19,7 +21,7 @@ app.use((req, res, next) => {
 });
 app.use(bodyParser.json());
 const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: '*' } });
+const io = new Server(server, { cors: { origin: FRONTEND_ORIGIN } });
 // simple in-memory claimed slots map: gameId -> array of player ids
 const claimedSlots = new Map<string, string[]>();
 
