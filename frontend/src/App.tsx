@@ -3,14 +3,25 @@ import { GameState, Coord } from 'quoridor-core';
 import * as core from 'quoridor-core';
 import { io } from 'socket.io-client';
 
-const SERVER = ((import.meta as any).env && (import.meta as any).env.VITE_API_URL) || 'http://localhost:3000';
+const SERVER = ((import.meta as any).env && (import.meta as any).env.VITE_API_URL);
 
 export default function App() {
+  // UI state for start screen and settings
+  const [showStart, setShowStart] = useState(true);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [defaultBoardSize, setDefaultBoardSize] = useState<number>(9);
+  const [defaultPlayers, setDefaultPlayers] = useState<number>(2);
   const [game, setGame] = useState<GameState | null>(null);
   const [gameId, setGameId] = useState<string | null>(null);
   const [placingWall, setPlacingWall] = useState<'H' | 'V' | 'B' | null>(null);
   const [showValidAnchors, setShowValidAnchors] = useState(true);
   const [boardSize, setBoardSize] = useState<number | null>(null);
+  // new UI state for homepage / lobby flows
+  const [playerName, setPlayerName] = useState<string>('');
+  const [showLobbyPopup, setShowLobbyPopup] = useState(false);
+  const [lobbyView, setLobbyView] = useState<'main' | 'playLocalOptions' | null>('main');
+  const [roomInfo, setRoomInfo] = useState<{ admin?: string; spectators: string[]; started?: boolean; boardSize?: number; roomId?: string } | null>(null);
+  const [copied, setCopied] = useState(false);
   const [connected, setConnected] = useState(false);
   const socketRef = useRef<any>(null);
   const [claimedSlots, setClaimedSlots] = useState<string[]>([]);
@@ -39,6 +50,33 @@ export default function App() {
     });
     return () => { socket.disconnect(); };
   }, [gameId]);
+
+  // auto-join from URL (#room=ID or ?room=ID) on first load
+  useEffect(() => {
+    try {
+      const h = window.location.hash || '';
+      const q = window.location.search || '';
+      let id: string | null = null;
+      if (h.startsWith('#')) {
+        const m = h.match(/room=([a-zA-Z0-9\-_:]+)/);
+        if (m) id = m[1];
+      }
+      if (!id && q.startsWith('?')) {
+        const params = new URLSearchParams(q.slice(1));
+        const r = params.get('room');
+        if (r) id = r;
+      }
+      if (id) {
+        // open lobby and attempt join; allow playerName to be empty (guest)
+        setShowLobbyPopup(true);
+        setLobbyView('main');
+        // small timeout so UI has opened
+        setTimeout(() => joinGame(id as string), 120);
+      }
+    } catch (e) {
+      // ignore
+    }
+  }, []);
 
   useEffect(() => {
     if (game) setBoardSize(game.boardSize);
@@ -93,17 +131,49 @@ export default function App() {
     }
   }
 
-  async function createGame() {
-    const res = await fetch(`${SERVER}/games`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+  async function createGame(playersCount = 2) {
+    const res = await fetch(`${SERVER}/games`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ players: playersCount }) });
     const body = await res.json();
     const g = body.game as GameState;
     setGame(g);
     if (body.id) setGameId(body.id);
     if (body.id && body.slots) setClaimedSlots(body.slots);
+    // basic room info: mark creator as admin, store room id and reset spectators
+    setRoomInfo({ admin: playerName || 'admin', spectators: [], started: false, boardSize: g.boardSize, roomId: body.id });
   }
 
-  function createLocalGame(players = 2) {
-    const N = players === 2 ? core.DEFAULTS.defaultBoard2P : core.DEFAULTS.defaultBoard3P;
+  function getRoomUrl(id?: string) {
+    if (!id) return '';
+    // build a shareable URL assuming frontend runs at window.location
+    try {
+      const loc = window.location.href.replace(window.location.hash, '');
+      return `${loc.replace(/\/$/, '')}#room=${id}`;
+    } catch (e) {
+      return id;
+    }
+  }
+
+  async function copyRoomLink() {
+    if (!roomInfo?.roomId) return;
+    const url = getRoomUrl(roomInfo.roomId);
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch (e) {
+      // fallback: create temporary input
+      const el = document.createElement('input');
+      el.value = url;
+      document.body.appendChild(el);
+      el.select();
+      try { document.execCommand('copy'); setCopied(true); window.setTimeout(() => setCopied(false), 2000); } catch (_) {}
+      document.body.removeChild(el);
+    }
+  }
+
+  function createLocalGame(players = 2, size?: number) {
+    // Allow overriding board size from settings; fall back to library defaults when not provided
+    const N = typeof size === 'number' ? size : (players === 2 ? core.DEFAULTS.defaultBoard2P : core.DEFAULTS.defaultBoard3P);
     const playersArr: any[] = [];
     if (players === 2) {
       const mid = Math.floor(N / 2);
@@ -127,6 +197,8 @@ export default function App() {
     setGameId(null);
     setIsLocalGame(true);
     setWinner(null);
+    // clear any room info when starting local game
+    setRoomInfo(null);
   }
 
   function restartLocal() {
@@ -151,6 +223,13 @@ export default function App() {
     setGame(body.game as GameState);
     setGameId(id);
     if (body.slots) setClaimedSlots(body.slots);
+    // add this client as a spectator by default (client-side only); server should manage this in a real app
+    setRoomInfo((r) => {
+      const base = r ?? { spectators: [], started: false, boardSize: body.game?.boardSize ?? defaultBoardSize } as any;
+      const name = playerName || 'guest';
+      if ((base.spectators || []).includes(name)) return base;
+      return { ...base, spectators: [...(base.spectators || []), name] };
+    });
   }
 
   async function doMove(r: number, c: number) {
@@ -234,17 +313,129 @@ export default function App() {
     <div className="app-root">
       <h1 className="app-title">Quoridor</h1>
 
+      {/* Homepage / start screen */}
+      {showStart ? (
+        <div className="start-screen homepage">
+          <div className="home-grid">
+            <div className="home-left">
+              <h2 className="game-name">Quoridor</h2>
+              <div className="rules">
+                <h3>Rules</h3>
+                <ol>
+                  <li>Move your pawn to reach the opposite side of the board.</li>
+                  <li>On your turn you may move or place a wall.</li>
+                  <li>Walls block movement but cannot fully block a player from reaching their goal.</li>
+                  <li>Use strategy to delay opponents while advancing your pawn.</li>
+                </ol>
+              </div>
+            </div>
+            <div className="home-right">
+              <h3>Enter</h3>
+              <label style={{ display: 'block', marginBottom: 8 }}>Your name
+                <input value={playerName} onChange={(e) => setPlayerName(e.target.value)} placeholder="Alice" />
+              </label>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button className="btn primary" onClick={() => { setShowStart(false); /* go directly into app */ }}>Skip</button>
+                <button className="btn" onClick={() => { setShowLobbyPopup(true); setLobbyView('main'); }}>Enter Game</button>
+              </div>
+              <div style={{ marginTop: 12 }}>
+                <small className="muted">Tip: enter your name so other players see it in the lobby.</small>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Lobby popup shown after Enter Game */}
+      {showLobbyPopup ? (
+        <div className="overlay">
+          <div className="modal">
+            <h3>Lobby</h3>
+            {lobbyView === 'main' ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button className="btn primary" onClick={() => { createGame(2); setShowLobbyPopup(true); }}>Create Room (2P)</button>
+                  <button className="btn primary" onClick={() => { createGame(3); setShowLobbyPopup(true); }}>Create Room (3P)</button>
+                  <button className="btn primary" onClick={() => { createGame(4); setShowLobbyPopup(true); }}>Create Room (4P)</button>
+                </div>
+                {roomInfo?.roomId ? (
+                  <div style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <input readOnly value={getRoomUrl(roomInfo.roomId)} style={{ flex: 1, padding: '6px 8px' }} />
+                    <button className="btn" onClick={copyRoomLink}>{copied ? 'Copied' : 'Copy'}</button>
+                  </div>
+                ) : null}
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input placeholder="Paste room id to join" id="joinRoomInput" />
+                  <button className="btn" onClick={async () => {
+                    const el = document.getElementById('joinRoomInput') as HTMLInputElement | null;
+                    if (!el || !el.value) return alert('enter room id');
+                    await joinGame(el.value);
+                    setShowLobbyPopup(true);
+                  }}>Join Room</button>
+                </div>
+                <button className="btn" onClick={() => { setLobbyView('playLocalOptions'); }}>Play Local</button>
+                <div style={{ marginTop: 8 }}>
+                  <button className="btn ghost" onClick={() => setShowLobbyPopup(false)}>Close</button>
+                </div>
+              </div>
+            ) : lobbyView === 'playLocalOptions' ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button className="btn" onClick={() => { createLocalGame(2, defaultBoardSize); setShowLobbyPopup(false); }}>2P</button>
+                  <button className="btn" onClick={() => { createLocalGame(3, defaultBoardSize); setShowLobbyPopup(false); }}>3P</button>
+                  <button className="btn" onClick={() => { createLocalGame(4, defaultBoardSize); setShowLobbyPopup(false); }}>4P</button>
+                </div>
+                <div>
+                  <button className="btn ghost" onClick={() => setLobbyView('main')}>Back</button>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
       <div className="hud">
         <div><strong>Server:</strong> {SERVER}</div>
         <div><strong>Socket:</strong> <span style={{ color: connected ? 'green' : 'red' }}>{connected ? 'connected' : 'disconnected'}</span></div>
         <div style={{ marginLeft: 'auto' }}>
+          <button className="btn ghost" onClick={() => setShowStart(true)}>Menu</button>
+          <button className="btn ghost" onClick={() => setSettingsOpen(true)}>Settings</button>
           <button className="btn ghost" onClick={() => { if (isLocalGame) restartLocal(); else restartServerGame(); }}>Restart</button>
         </div>
       </div>
 
+      {/* Settings modal when opened from HUD while in-app */}
+      {settingsOpen && !showStart ? (
+        <div className="overlay">
+          <div className="modal">
+            <h3>Settings</h3>
+            <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 8 }}>
+              <label style={{ display: 'flex', flexDirection: 'column' }}>Board size
+                <input type="number" min={5} max={15} value={defaultBoardSize} onChange={(e) => setDefaultBoardSize(Math.max(5, Math.min(15, Number(e.target.value) || 9)))} />
+              </label>
+              <label style={{ display: 'flex', flexDirection: 'column' }}>Players
+                <select value={defaultPlayers} onChange={(e) => setDefaultPlayers(Number(e.target.value))}>
+                  <option value={2}>2</option>
+                  <option value={3}>3</option>
+                  <option value={4}>4</option>
+                </select>
+              </label>
+            </div>
+            <div className="actions" style={{ marginTop: 16 }}>
+              <button className="btn ghost" onClick={() => setSettingsOpen(false)}>Close</button>
+              <button className="btn primary" onClick={() => { setSettingsOpen(false); }}>Save</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <button onClick={() => createGame()}>Create Game (server)</button>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button onClick={() => createGame(2)}>Create Game (2P)</button>
+            <button onClick={() => createGame(3)}>Create Game (3P)</button>
+            <button onClick={() => createGame(4)}>Create Game (4P)</button>
+          </div>
           <input placeholder="Game ID (join)" onKeyDown={(e) => { if (e.key === 'Enter') joinGame((e.target as HTMLInputElement).value); }} />
           {/* anchors are always visible — walls can be placed at any time */}
           <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
@@ -363,32 +554,48 @@ export default function App() {
                   <div style={{ fontSize: 13 }}>{p.id} — walls: {p.wallsRemaining ?? '-'} — pos: {p.pos.r},{p.pos.c}</div>
                   {gameId ? (
                     <div style={{ marginLeft: 8 }}>
-                      {claimedSlots.includes(p.id) ? (
-                        <small style={{ color: '#666' }}>joined</small>
+                      {roomInfo?.started ? (
+                        // game started -> spectators cannot join
+                        claimedSlots.includes(p.id) ? (
+                          <small style={{ color: '#666' }}>joined</small>
+                        ) : (
+                          <small style={{ color: '#aa0000' }}>spectator</small>
+                        )
                       ) : (
-                        <button onClick={async () => {
-                          // optimistic local claim so UI shows Join immediately
-                          setClaimedSlots((s) => Array.from(new Set([...(s || []), p.id])));
-                          setLocalPlayerId(p.id);
-                          // emit socket event if connected
-                          try {
-                            if (socketRef.current && socketRef.current.connected) {
-                              socketRef.current.emit('join_slot', { gameId, slot: p.id });
+                        // before start, allow joining slots (claim a side) or show joined
+                        claimedSlots.includes(p.id) ? (
+                          <small style={{ color: '#666' }}>joined</small>
+                        ) : (
+                          <button onClick={async () => {
+                            // optimistic local claim so UI shows Join immediately
+                            setClaimedSlots((s) => Array.from(new Set([...(s || []), p.id])));
+                            setLocalPlayerId(p.id);
+                            // remove from spectators list client-side (they took a side)
+                            setRoomInfo((r) => {
+                              if (!r) return r;
+                              const name = playerName || 'guest';
+                              return { ...r, spectators: (r.spectators || []).filter((s) => s !== name) };
+                            });
+                            // emit socket event if connected
+                            try {
+                              if (socketRef.current && socketRef.current.connected) {
+                                socketRef.current.emit('join_slot', { gameId, slot: p.id, name: playerName });
+                              }
+                            } catch (e) {
+                              // ignore
                             }
-                          } catch (e) {
-                            // ignore
-                          }
-                          // best-effort POST in case server provides a REST join endpoint
-                          try {
-                            const res = await fetch(`${SERVER}/games/${gameId}/join`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ slot: p.id }) });
-                            if (res.ok) {
-                              const body = await res.json();
-                              if (body.slots) setClaimedSlots(body.slots);
+                            // best-effort POST in case server provides a REST join endpoint
+                            try {
+                              const res = await fetch(`${SERVER}/games/${gameId}/join`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ slot: p.id, name: playerName }) });
+                              if (res.ok) {
+                                const body = await res.json();
+                                if (body.slots) setClaimedSlots(body.slots);
+                              }
+                            } catch (e) {
+                              // network error, ignore; optimistic UI already updated
                             }
-                          } catch (e) {
-                            // network error, ignore; optimistic UI already updated
-                          }
-                        }}>Join</button>
+                          }}>Join</button>
+                        )
                       )}
                     </div>
                   ) : null}
@@ -396,6 +603,40 @@ export default function App() {
               ))}
             </div>
           </div>
+          {/* Room admin controls */}
+          {roomInfo ? (
+            <div style={{ marginTop: 12 }}>
+              <h4>Room</h4>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'space-between' }}>
+                <div>Admin: {roomInfo.admin}</div>
+                <div style={{ fontSize: 12, color: '#666' }}>{roomInfo.roomId ? `id: ${roomInfo.roomId}` : ''}</div>
+              </div>
+              <div style={{ marginTop: 6 }}>Spectators: {roomInfo.spectators.length}</div>
+              {roomInfo.roomId ? (
+                <div style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <input readOnly value={getRoomUrl(roomInfo.roomId)} style={{ flex: 1, padding: '6px 8px' }} />
+                  <button className="btn" onClick={copyRoomLink}>{copied ? 'Copied' : 'Copy'}</button>
+                </div>
+              ) : null}
+              <div style={{ marginTop: 8 }}>
+                {roomInfo.admin === (playerName || 'admin') ? (
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button className="btn primary" onClick={() => {
+                      // start game: set room started and optionally set state that server would otherwise do
+                      setRoomInfo({ ...roomInfo, started: true });
+                      // mark that after starting, no new side joins allowed; server should enforce in real app
+                    }}>Start Game</button>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      Board size:
+                      <input type="number" value={roomInfo.boardSize || boardSize || 9} min={5} max={15} onChange={(e) => setRoomInfo({ ...roomInfo, boardSize: Number(e.target.value) })} style={{ width: 72 }} />
+                    </label>
+                  </div>
+                ) : (
+                  <div><small>Waiting for admin to start the game...</small></div>
+                )}
+              </div>
+            </div>
+          ) : null}
           <h4>Raw state</h4>
           <pre className="state-pre">{JSON.stringify(game, null, 2)}</pre>
         </div>
