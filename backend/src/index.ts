@@ -24,6 +24,8 @@ const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: FRONTEND_ORIGIN } });
 // simple in-memory claimed slots map: gameId -> array of player ids
 const claimedSlots = new Map<string, string[]>();
+// map gameId -> { slotId: displayName }
+const claimedNames = new Map<string, Record<string, string>>();
 
 app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 
@@ -50,8 +52,11 @@ app.post('/games/:id/join', (req, res) => {
   const arr = claimedSlots.get(req.params.id) || [];
   if (!arr.includes(slot)) arr.push(slot);
   claimedSlots.set(req.params.id, arr);
-  io.emit('slot_update', { id: req.params.id, slots: arr });
-  res.json({ id: req.params.id, slots: arr });
+  // ensure names map exists
+  const names = claimedNames.get(req.params.id) || {};
+  claimedNames.set(req.params.id, names);
+  io.emit('slot_update', { id: req.params.id, slots: arr, names });
+  res.json({ id: req.params.id, slots: arr, names });
 });
 
 app.post('/games/:id/move', (req, res) => {
@@ -95,7 +100,7 @@ io.on('connection', (socket) => {
   console.log(`socket connected: ${socket.id}`);
   socket.on('join_slot', (payload: any) => {
     try {
-      const { gameId, slot } = payload || {};
+      const { gameId, slot, name } = payload || {};
       if (!gameId || !slot) return socket.emit('joined', { error: 'missing' });
       const game = store.getGame(gameId);
       if (!game) return socket.emit('joined', { error: 'not found' });
@@ -104,7 +109,11 @@ io.on('connection', (socket) => {
       const arr = claimedSlots.get(gameId) || [];
       if (!arr.includes(slot)) arr.push(slot);
       claimedSlots.set(gameId, arr);
-      io.emit('slot_update', { id: gameId, slots: arr });
+      // update names map with provided name
+      const names = claimedNames.get(gameId) || {};
+      if (name && typeof name === 'string') names[slot] = name;
+      claimedNames.set(gameId, names);
+      io.emit('slot_update', { id: gameId, slots: arr, names });
       socket.emit('joined', { id: gameId, playerId: slot });
     } catch (e) {
       socket.emit('joined', { error: 'failed' });

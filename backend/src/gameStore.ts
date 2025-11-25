@@ -1,4 +1,4 @@
-import { randomUUID } from 'crypto';
+import { randomBytes } from 'crypto';
 import { GameState, Player, DEFAULTS } from 'quoridor-core';
 
 const games = new Map<string, GameState>();
@@ -25,7 +25,21 @@ export function createGame(playersCount = 2): { id: string; game: GameState } {
   }
   const game: GameState = { boardSize: N, players, walls: [], turnIndex: 0 } as any;
   ensurePlayerGoals(game);
-  const id = randomUUID();
+  // generate a compact 6-letter id (lowercase letters)
+  function genId(len = 6) {
+    const alphabet = 'abcdefghijklmnopqrstuvwxyz';
+    const bytes = randomBytes(len);
+    let s = '';
+    for (let i = 0; i < len; i++) {
+      s += alphabet[bytes[i] % alphabet.length];
+    }
+    return s;
+  }
+  let id = genId(6);
+  // avoid collisions (unlikely but safe)
+  while (games.has(id)) {
+    id = genId(6);
+  }
   games.set(id, game);
   return { id, game };
 }
