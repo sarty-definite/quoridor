@@ -11,7 +11,6 @@ export default function App() {
   // UI state for start screen and settings
   // showStart replaced by homepageVisible which controls the separate Homepage page
   const [homepageVisible, setHomepageVisible] = useState(true);
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const [defaultBoardSize, setDefaultBoardSize] = useState<number>(9);
   const [defaultPlayers, setDefaultPlayers] = useState<number>(2);
   const [game, setGame] = useState<GameState | null>(null);
@@ -460,35 +459,10 @@ export default function App() {
             Show valid wall moves
           </label>
           <button className="btn ghost" onClick={() => setMenuVisible(true)}>Menu</button>
-          <button className="btn ghost" onClick={() => setSettingsOpen(true)}>Settings</button>
           <button className="btn ghost" onClick={() => { if (isLocalGame) restartLocal(); else restartServerGame(); }}>Restart</button>
         </div>
       </div>
 
-      {/* Settings modal when opened from HUD while in-app */}
-      {settingsOpen && !homepageVisible ? (
-        <div className="overlay">
-          <div className="modal">
-            <h3>Settings</h3>
-            <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 8 }}>
-              <label style={{ display: 'flex', flexDirection: 'column' }}>Board size
-                <input type="number" min={5} max={15} value={defaultBoardSize} onChange={(e) => setDefaultBoardSize(Math.max(5, Math.min(15, Number(e.target.value) || 9)))} />
-              </label>
-              <label style={{ display: 'flex', flexDirection: 'column' }}>Players
-                <select value={defaultPlayers} onChange={(e) => setDefaultPlayers(Number(e.target.value))}>
-                  <option value={2}>2</option>
-                  <option value={3}>3</option>
-                  <option value={4}>4</option>
-                </select>
-              </label>
-            </div>
-            <div className="actions" style={{ marginTop: 16 }}>
-              <button className="btn ghost" onClick={() => setSettingsOpen(false)}>Close</button>
-              <button className="btn primary" onClick={() => { setSettingsOpen(false); }}>Save</button>
-            </div>
-          </div>
-        </div>
-      ) : null}
 
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
