@@ -44,6 +44,30 @@ export function createGame(playersCount = 2): { id: string; game: GameState } {
   return { id, game };
 }
 
+// create a GameState for a given playersCount and board size (does not persist or generate id)
+export function createGameWithSize(playersCount = 2, boardSize: number): GameState {
+  const N = boardSize;
+  const players: Player[] = [] as any;
+  if (playersCount === 2) {
+    players.push({ id: 'p1', pos: { r: N - 1, c: Math.floor(N / 2) }, startPos: { r: N - 1, c: Math.floor(N / 2) }, wallsRemaining: DEFAULTS.walls2P, goal: { axis: 'r', value: 0 } } as any);
+    players.push({ id: 'p2', pos: { r: 0, c: Math.floor(N / 2) }, startPos: { r: 0, c: Math.floor(N / 2) }, wallsRemaining: DEFAULTS.walls2P, goal: { axis: 'r', value: N - 1 } } as any);
+  } else if (playersCount === 3) {
+    const mid = Math.floor(N / 2);
+    players.push({ id: 'p1', pos: { r: N - 1, c: mid }, startPos: { r: N - 1, c: mid }, wallsRemaining: DEFAULTS.walls3P, goal: { axis: 'r', value: 0 } } as any);
+    players.push({ id: 'p2', pos: { r: 0, c: mid }, startPos: { r: 0, c: mid }, wallsRemaining: DEFAULTS.walls3P, goal: { axis: 'r', value: N - 1 } } as any);
+    players.push({ id: 'p3', pos: { r: mid, c: 0 }, startPos: { r: mid, c: 0 }, wallsRemaining: DEFAULTS.walls3P, goal: { axis: 'c', value: N - 1 } } as any);
+  } else if (playersCount === 4) {
+    const mid = Math.floor(N / 2);
+    players.push({ id: 'p1', pos: { r: N - 1, c: mid }, startPos: { r: N - 1, c: mid }, wallsRemaining: DEFAULTS.walls4P, goal: { axis: 'r', value: 0 } } as any);
+    players.push({ id: 'p2', pos: { r: 0, c: mid }, startPos: { r: 0, c: mid }, wallsRemaining: DEFAULTS.walls4P, goal: { axis: 'r', value: N - 1 } } as any);
+    players.push({ id: 'p3', pos: { r: mid, c: 0 }, startPos: { r: mid, c: 0 }, wallsRemaining: DEFAULTS.walls4P, goal: { axis: 'c', value: N - 1 } } as any);
+    players.push({ id: 'p4', pos: { r: mid, c: N - 1 }, startPos: { r: mid, c: N - 1 }, wallsRemaining: DEFAULTS.walls4P, goal: { axis: 'c', value: 0 } } as any);
+  }
+  const game: GameState = { boardSize: N, players, walls: [], turnIndex: 0 } as any;
+  ensurePlayerGoals(game);
+  return game;
+}
+
 export function getGame(id: string) {
   const g = games.get(id);
   if (!g) return undefined;

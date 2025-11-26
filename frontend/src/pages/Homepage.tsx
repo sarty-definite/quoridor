@@ -4,26 +4,18 @@ type Props = {
   playerName: string;
   setPlayerName: (v: string) => void;
   onSkip: () => void;
+  onQuickLocal?: (players: number) => void;
+  onQuickServer?: (players: number) => void;
   onEnter: () => void;
 };
-
-export default function Homepage({ playerName, setPlayerName, onSkip, onEnter }: Props) {
+export default function Homepage({ playerName, setPlayerName, onSkip, onEnter, onQuickLocal, onQuickServer }: Props) {
   return (
-    <div className="start-screen homepage-page" style={{
-      minHeight: '60vh',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      background: 'linear-gradient(135deg,#1f2937 0%, #111827 60%)',
-      color: '#fff',
-      padding: 24,
-      borderRadius: 8
-    }}>
-      <div className="home-grid" style={{ display: 'flex', gap: 24, maxWidth: 980, width: '100%' }}>
-        <div className="home-left" style={{ flex: 1 }}>
-          <h2 className="game-name" style={{ margin: 0 }}>Quoridor</h2>
-          <div className="rules" style={{ marginTop: 12, color: '#d1d5db' }}>
-            <h3 style={{ marginTop: 0 }}>Rules</h3>
+    <div className="start-screen homepage">
+      <div className="start-card home-grid">
+        <div className="home-left">
+          <h2 className="game-name">Quoridor</h2>
+          <div className="rules">
+            <h3>Rules</h3>
             <ol>
               <li>Move your pawn to reach the opposite side of the board.</li>
               <li>On your turn you may move or place a wall.</li>
@@ -32,16 +24,31 @@ export default function Homepage({ playerName, setPlayerName, onSkip, onEnter }:
             </ol>
           </div>
         </div>
-        <div className="home-right" style={{ width: 320, background: 'rgba(255,255,255,0.04)', padding: 16, borderRadius: 6 }}>
-          <h3 style={{ marginTop: 0 }}>Enter</h3>
+
+        <div className="home-right">
+          <h3>Enter</h3>
           <label style={{ display: 'block', marginBottom: 8 }}>Your name
             <input value={playerName} onChange={(e) => setPlayerName(e.target.value)} placeholder="Alice" style={{ display: 'block', width: '100%', marginTop: 6, padding: 8 }} />
           </label>
           <div style={{ display: 'flex', gap: 8 }}>
-            <button className="btn" onClick={onEnter}>Enter Game</button>
+            <button className="btn primary" onClick={onEnter}>Enter Game</button>
+            <button className="btn ghost" onClick={onSkip}>Skip</button>
+          </div>
+
+          <div style={{ marginTop: 12 }}>
+            <h4 style={{ margin: '10px 0' }}>Quick actions</h4>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button className="btn" onClick={() => { if (onQuickLocal) onQuickLocal(2); }}>Quick 2P Local</button>
+              <button className="btn" onClick={() => { if (onQuickLocal) onQuickLocal(4); }}>Quick 4P Local</button>
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+              <button className="btn" onClick={() => { if (onQuickServer) onQuickServer(2); }}>Quick 2P Room</button>
+              <button className="btn" onClick={() => { if (onQuickServer) onQuickServer(4); }}>Quick 4P Room</button>
+            </div>
           </div>
         </div>
       </div>
     </div>
   );
 }
+

@@ -96,6 +96,23 @@ app.post('/games/:id/place_wall', (req, res) => {
   }
 });
 
+// resize board for an existing game: recreate game state with the same player count
+app.post('/games/:id/resize', (req, res) => {
+  const game = store.getGame(req.params.id);
+  if (!game) return res.status(404).json({ error: 'not found' });
+  const boardSize = Number(req.body.boardSize);
+  if (!boardSize || boardSize < 5 || boardSize > 25) return res.status(400).json({ error: 'invalid boardSize' });
+  const playersCount = (game.players || []).length || 2;
+  try {
+    const newGame = store.createGameWithSize(playersCount, boardSize);
+    store.saveGame(req.params.id, newGame);
+    io.emit('game_update', { id: req.params.id, game: newGame });
+    return res.json({ id: req.params.id, game: newGame });
+  } catch (e: any) {
+    return res.status(500).json({ error: 'failed' });
+  }
+});
+
 io.on('connection', (socket) => {
   console.log(`socket connected: ${socket.id}`);
   socket.on('join_slot', (payload: any) => {

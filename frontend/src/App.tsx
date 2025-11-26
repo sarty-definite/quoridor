@@ -366,12 +366,46 @@ export default function App() {
             setShowLobbyPopup(true);
             setLobbyView('main');
           }}
+          onQuickLocal={(players) => {
+            // start a local quick game
+            createLocalGame(players, defaultBoardSize);
+            setHomepageVisible(false);
+          }}
+          onQuickServer={async (players) => {
+            // create a server room and open lobby
+            await createGame(players);
+            setHomepageVisible(false);
+            setShowLobbyPopup(true);
+          }}
         />
       ) : null}
 
       {/* Menu shown when user explicitly opens the app without a room link */}
       {!homepageVisible && menuVisible ? (
-        <MenuPage onCreateRoom={(p) => { createGame(p); setShowLobbyPopup(true); setLobbyView('main'); }} onPlayLocal={(p) => { createLocalGame(p); setMenuVisible(false); }} onBack={() => setMenuVisible(false)} />
+        <MenuPage
+          onCreateRoom={(p) => { createGame(p); setShowLobbyPopup(true); setLobbyView('main'); }}
+          onPlayLocal={(p) => { createLocalGame(p); setMenuVisible(false); }}
+          onBack={() => setMenuVisible(false)}
+          onChangeBoardSize={async (size: number) => {
+            // if in a server room, call backend resize
+            if (gameId) {
+              try {
+                const res = await fetch(`${SERVER}/games/${gameId}/resize`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ boardSize: size }) });
+                if (!res.ok) throw new Error('resize failed');
+                const body = await res.json();
+                setGame(body.game);
+                setBoardSize(size);
+                setRoomInfo((r) => r ? { ...r, boardSize: size } : r);
+              } catch (e) {
+                alert('Failed to resize game on server');
+              }
+              return;
+            }
+            // otherwise update defaultBoardSize for local games
+            setDefaultBoardSize(size);
+            if (isLocalGame) createLocalGame(game?.players.length ?? 2, size);
+          }}
+        />
       ) : null}
 
       {/* Lobby popup shown after Enter Game */}
@@ -383,6 +417,23 @@ export default function App() {
                 onCreateRoom={(p) => { createGame(p); setShowLobbyPopup(true); setLobbyView('main'); }}
                 onPlayLocal={(p) => { createLocalGame(p); setShowLobbyPopup(false); setLobbyView(null); }}
                 onBack={() => setShowLobbyPopup(false)}
+                onChangeBoardSize={async (size: number) => {
+                  if (gameId) {
+                    try {
+                      const res = await fetch(`${SERVER}/games/${gameId}/resize`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ boardSize: size }) });
+                      if (!res.ok) throw new Error('resize failed');
+                      const body = await res.json();
+                      setGame(body.game);
+                      setBoardSize(size);
+                      setRoomInfo((r) => r ? { ...r, boardSize: size } : r);
+                    } catch (e) {
+                      alert('Failed to resize game on server');
+                    }
+                    return;
+                  }
+                  setDefaultBoardSize(size);
+                  if (isLocalGame) createLocalGame(game?.players.length ?? 2, size);
+                }}
               />
             </div>
           </div>
