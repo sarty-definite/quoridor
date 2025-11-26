@@ -381,10 +381,13 @@ export default function App() {
 
       {/* Menu shown when user explicitly opens the app without a room link */}
       {!homepageVisible && menuVisible ? (
+        <div className="overlay">
+            <div className="modal">
         <MenuPage
           onCreateRoom={(p) => { createGame(p); setShowLobbyPopup(true); setLobbyView('main'); }}
           onPlayLocal={(p) => { createLocalGame(p); setMenuVisible(false); }}
           onBack={() => setMenuVisible(false)}
+          boardSize={boardSize ?? defaultBoardSize}
           onChangeBoardSize={async (size: number) => {
             // if in a server room, call backend resize
             if (gameId) {
@@ -405,6 +408,7 @@ export default function App() {
             if (isLocalGame) createLocalGame(game?.players.length ?? 2, size);
           }}
         />
+        </div></div>
       ) : null}
 
       {/* Lobby popup shown after Enter Game */}
@@ -416,6 +420,7 @@ export default function App() {
                 onCreateRoom={(p) => { createGame(p); setShowLobbyPopup(true); setLobbyView('main'); }}
                 onPlayLocal={(p) => { createLocalGame(p); setShowLobbyPopup(false); setLobbyView(null); }}
                 onBack={() => setShowLobbyPopup(false)}
+                boardSize={boardSize ?? defaultBoardSize}
                 onChangeBoardSize={async (size: number) => {
                   if (gameId) {
                     try {

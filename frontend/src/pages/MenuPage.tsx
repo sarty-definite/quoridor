@@ -5,9 +5,10 @@ type Props = {
   onPlayLocal: (players: number) => void;
   onBack?: () => void;
   onChangeBoardSize?: (size: number) => void;
+  boardSize?: number;
 };
 
-export default function MenuPage({ onCreateRoom, onPlayLocal, onBack, onChangeBoardSize }: Props) {
+export default function MenuPage({ onCreateRoom, onPlayLocal, onBack, onChangeBoardSize, boardSize }: Props) {
   return (
     <div style={{ padding: 16 }}>
       <h2>Menu</h2>
@@ -27,7 +28,7 @@ export default function MenuPage({ onCreateRoom, onPlayLocal, onBack, onChangeBo
       <div style={{ marginTop: 12 }}>
         <h4>Change board size</h4>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <input id="menu-board-size" type="number" min={5} max={25} defaultValue={9} style={{ width: 84, padding: '6px 8px' }} />
+          <input id="menu-board-size" type="number" min={5} max={25} defaultValue={boardSize ?? 9} style={{ width: 84, padding: '6px 8px' }} />
           <button className="btn" onClick={() => {
             const el = document.getElementById('menu-board-size') as HTMLInputElement | null;
             if (!el || !el.value) return alert('enter board size');
