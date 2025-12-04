@@ -312,6 +312,21 @@ export default function App() {
 
   const N = boardSize ?? 9;
 
+  // helper to map player id to color used in the UI
+  const playerColor = (id: string) => id === 'p1' ? '#ff8a65' : id === 'p2' ? '#64b5f6' : id === 'p3' ? '#81c784' : '#ba68c8';
+
+  // convert hex like #rrggbb to rgba string with given alpha
+  const hexToRgba = (hex: string, a = 0.16) => {
+    try {
+      const r = parseInt(hex.slice(1, 3), 16);
+      const g = parseInt(hex.slice(3, 5), 16);
+      const b = parseInt(hex.slice(5, 7), 16);
+      return `rgba(${r}, ${g}, ${b}, ${a})`;
+    } catch (e) {
+      return hex;
+    }
+  };
+
   const anchors = useMemo(() => {
     const H: { r: number; c: number }[] = [];
     const V: { r: number; c: number }[] = [];
@@ -568,8 +583,10 @@ export default function App() {
           ['--tile' as any]: `calc((var(--board-size) - (${N - 1} * var(--gap, 6px)) - (var(--pad, 6px) * 2)) / ${N})`,
           ['--wall-thickness' as any]: '8px', ['--wall-offset' as any]: '8px', ['--gap' as any]: '6px', ['--pad' as any]: '6px', ['--anchor-gap' as any]: '12px', ['--anchor-gap-x' as any]: '12px', ['--anchor-gap-y' as any]: '12px', ['--step' as any]: 'calc(var(--tile) + var(--gap))'
         }}>
-          {/* grid */}
-          <div className="grid" style={{ gridTemplateColumns: `repeat(${N}, var(--tile))`, gridTemplateRows: `repeat(${N}, var(--tile))` }}>
+          {/* grid wrapper: exact pixel area of tiles + gaps; anchors/goals/walls will be positioned relative to this */}
+          <div className="grid-wrapper" style={{ position: 'relative', width: `calc(${N} * var(--tile) + ${N - 1} * var(--gap))`, height: `calc(${N} * var(--tile) + ${N - 1} * var(--gap))` }}>
+            {/* grid */}
+            <div className="grid" style={{ gridTemplateColumns: `repeat(${N}, var(--tile))`, gridTemplateRows: `repeat(${N}, var(--tile))` }}>
             {Array.from({ length: N }).map((_, r) =>
               Array.from({ length: N }).map((__, c) => {
                 const pawn = game?.players.find((p: any) => p.pos.r === r && p.pos.c === c);
@@ -590,6 +607,30 @@ export default function App() {
             )}
           </div>
 
+          {/* goal lines: subtle overlays indicating each player's goal row/column (opposite side) */}
+          {game?.players.map((p: any) => {
+            // player's goal: { axis: 'r' | 'c', value: number }
+            const goal = p.goal;
+            if (!goal) return null;
+            const color = hexToRgba(playerColor(p.id), 0.9);
+            // Position goal-lines inside the gap between tiles (use interior gaps [0..N-2])
+            // so they sit between cells rather than overlapping the tile centers.
+            const gapIndex = Math.max(0, Math.min(N - 2, goal.value));
+            if (goal.axis === 'r') {
+              // horizontal line centered in the gap after row=gapIndex
+              const top = `calc(var(--step) * ${gapIndex} + var(--tile) + calc(var(--gap) / 2) - 2px)`;
+              return (
+                <div key={`goal-line-r-${p.id}`} style={{ position: 'absolute', left: 0, right: 0, height: 4, top, background: color, pointerEvents: 'none', borderRadius: 4, zIndex: 10 }} />
+              );
+            } else {
+              // vertical line centered in the gap after column=gapIndex
+              const left = `calc(var(--step) * ${gapIndex} + var(--tile) + calc(var(--gap) / 2) - 2px)`;
+              return (
+                <div key={`goal-line-c-${p.id}`} style={{ position: 'absolute', top: 0, bottom: 0, width: 4, left, background: color, pointerEvents: 'none', borderRadius: 4, zIndex: 10 }} />
+              );
+            }
+          })}
+
           {/* render horizontal wall anchors and existing walls */}
           {/* render clickable horizontal anchors when in H-placement mode */}
           {anchors.H.map((a) => {
@@ -607,7 +648,7 @@ export default function App() {
             return (
               <div key={`anchor-h-${a.r}-${a.c}`} className="anchor-container" style={containerStyle}>
                 <div className={`anchor anchor-h valid`} style={visibleStyle} />
-                <div className={`anchor-hit anchor-h`} role="button" aria-label={`Place horizontal wall at ${a.r},${a.c}`} onClick={() => { if (valid) doPlaceWall(a.r, a.c, 'H'); }} style={{ position: 'absolute' }} />
+                <div className={`anchor-hit anchor-h`} role="button" aria-label={`Place horizontal wall at ${a.r},${a.c}`} onClick={() => { if (valid) doPlaceWall(a.r, a.c, 'H'); }} style={{ position: 'absolute', left: 0, top: 0, right: 0, bottom: 0 }} />
               </div>
             );
           })}
@@ -635,7 +676,7 @@ export default function App() {
             return (
               <div key={`anchor-v-${a.r}-${a.c}`} className="anchor-container" style={containerStyle}>
                 <div className={`anchor anchor-v valid`} style={visibleStyle} />
-                <div className={`anchor-hit anchor-v`} role="button" aria-label={`Place vertical wall at ${a.r},${a.c}`} onClick={() => { if (valid) doPlaceWall(a.r, a.c, 'V'); }} style={{ position: 'absolute' }} />
+                <div className={`anchor-hit anchor-v`} role="button" aria-label={`Place vertical wall at ${a.r},${a.c}`} onClick={() => { if (valid) doPlaceWall(a.r, a.c, 'V'); }} style={{ position: 'absolute', left: 0, top: 0, right: 0, bottom: 0 }} />
               </div>
             );
           })}
@@ -645,11 +686,8 @@ export default function App() {
             // placed vertical wall centered in the gap
             <div key={`wall-v-${w.r}-${w.c}`} className="wall-v" style={{ position: 'absolute', top: `calc(var(--step) * ${w.r})`, left: `calc(var(--step) * ${w.c} + var(--tile) + calc(var(--gap) / 2) - calc(var(--wall-thickness) / 2))`, width: 'var(--wall-thickness)', height: `calc(var(--tile) * 2 + var(--gap))`, background: '#333', borderRadius: 6 }} />
           ))}
+            </div>{/* end grid-wrapper */}
         </div>
-      <div className="state-viewer">
-                  <h4>Raw state</h4>
-          <pre className="state-pre">{JSON.stringify(game, null, 2)}</pre>
-      </div>
       </div>
 
       {winner ? (

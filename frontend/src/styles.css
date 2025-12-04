@@ -23,19 +23,15 @@
 .wall-h { position:absolute; height:14px; background:#333; border-radius:4px; }
 .wall-v { position:absolute; width:14px; background:#333; border-radius:4px; }
 
-.wall-h { transform: translateY(var(--anchor-h-offset, 5px)); transform-origin: center; }
-.wall-v { transform: translateX(var(--anchor-v-offset, 5px)); transform-origin: center; }
-.anchor { --anchor-h-offset: 5px; --anchor-v-offset: 5px; opacity: 0.95; cursor: pointer; transition: transform 0.12s ease, box-shadow 0.12s ease; border-radius:6px; position: relative; z-index: 20; }
+/* remove transform-based offsets for layout correctness; offsets are applied via container top/left calculations */
+.wall-h { transform: none; transform-origin: center; }
+.wall-v { transform: none; transform-origin: center; }
+.anchor { opacity: 0.95; transition: transform 0.12s ease, box-shadow 0.12s ease; border-radius:6px; position: relative; z-index: 20; pointer-events: none; }
 .anchor:hover { transform: translateY(calc(-2px)); box-shadow: 0 8px 24px rgba(16,24,40,0.12); }
 .anchor.valid { background: linear-gradient(180deg, rgba(76,175,80,0.98), rgba(56,150,55,0.95)); box-shadow: 0 6px 16px rgba(76,175,80,0.18); }
 .anchor.invalid { display: none; }
-.anchor-hit { position: absolute; background: transparent; border-radius: 8px; z-index: 30; pointer-events: auto; }
+.anchor-hit { position: absolute; background: transparent; border-radius: 8px; z-index: 1202; pointer-events: auto; cursor: pointer; left: 0; top: 0; right: 0; bottom: 0; }
 .anchor-hit:hover { background: rgba(0,0,0,0.04); }
-
-/* ensure the hit area follows the same visual offset as the visible anchor
-  so clicking the visible element actually triggers the hit area */
-.anchor-hit.anchor-h { transform: translateY(var(--anchor-h-offset)); }
-.anchor-hit.anchor-v { transform: translateX(var(--anchor-v-offset)); }
 /* put the hit element above walls and anchors when hovered so it receives clicks */
 .anchor-container .anchor-hit { z-index: 1202; }
 
@@ -56,12 +52,25 @@
 .board.hide-non-hover .anchor-container:hover .anchor.valid, .board.hide-non-hover .anchor-container:focus-within .anchor.valid { opacity: 1; pointer-events: auto; }
 
 /* show visual anchors slightly shorter to create a visible gap between adjacent anchors */
-.anchor-h { margin-left: calc(var(--anchor-gap-x) / 2); margin-right: calc(var(--anchor-gap-x) / 2); width: calc(100% - var(--anchor-gap-x)); height: 100%; transform: translateY(var(--anchor-h-offset)); }
-.anchor-v { margin-top: calc(var(--anchor-gap-y) / 2); margin-bottom: calc(var(--anchor-gap-y) / 2); height: calc(100% - var(--anchor-gap-y)); width: 100%; transform: translateX(var(--anchor-v-offset)); }
 
-/* match the clickable hit area to the visible anchor so clicks only land where the anchor appears */
-.anchor-container .anchor-hit.anchor-h { left: calc(var(--anchor-gap-x) / 2); right: calc(var(--anchor-gap-x) / 2); top: 0; bottom: 0; }
-.anchor-container .anchor-hit.anchor-v { top: calc(var(--anchor-gap-y) / 2); bottom: calc(var(--anchor-gap-y) / 2); left: 0; right: 0; }
+/* anchors: place the visual anchor absolutely inside the anchor container and
+   use padding to create the subtle gaps so the painted center equals the container
+   center (matching placed wall positions). The .anchor-hit fills the container
+   (set via inline style in JSX) so it exactly overlaps the visible anchor. */
+.anchor-h {
+  position: absolute;
+  left: 0; right: 0; top: 0; bottom: 0;
+  box-sizing: border-box;
+  padding-left: calc(var(--anchor-gap-x) / 2);
+  padding-right: calc(var(--anchor-gap-x) / 2);
+}
+.anchor-v {
+  position: absolute;
+  left: 0; right: 0; top: 0; bottom: 0;
+  box-sizing: border-box;
+  padding-top: calc(var(--anchor-gap-y) / 2);
+  padding-bottom: calc(var(--anchor-gap-y) / 2);
+}
 
 /* ensure walls and anchors are above the grid tiles */
 .anchor { z-index: 20; }
@@ -73,6 +82,18 @@
 .anchor-container { position: absolute; pointer-events: auto; z-index: 22; }
 .anchor-container .anchor { pointer-events: none; }
 .anchor-container .anchor-hit { pointer-events: auto; }
+
+/* grid-wrapper: reference container exactly matching tiles+gaps; positions inside use this as origin */
+.grid-wrapper { position: relative; display: block; box-sizing: content-box; }
+
+/* goal lines positioned inside grid-wrapper */
+.goal-line { position: absolute; pointer-events: none; border-radius: 4px; z-index: 10; }
+.goal-line-r { left: 0; right: 0; height: 4px; }
+.goal-line-c { top: 0; bottom: 0; width: 4px; }
+
+/* anchor-hit focus styles for accessibility */
+.anchor-hit:focus { outline: 2px solid rgba(76,175,80,0.45); }
+.anchor-hit { touch-action: manipulation; }
 
 .legend { display:flex; gap:8px; align-items:center; margin-bottom:8px; }
 .legend .item { display:flex; gap:8px; align-items:center; }
